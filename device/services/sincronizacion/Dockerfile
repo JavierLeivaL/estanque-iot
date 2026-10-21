@@ -2,7 +2,7 @@
 # así no hay que compilar nada en la Raspberry.
 FROM debian:trixie-slim
 RUN apt-get update \
- && apt-get install -y --no-install-recommends python3 python3-paho-mqtt \
+ && apt-get install -y --no-install-recommends ca-certificates python3 python3-paho-mqtt \
  && rm -rf /var/lib/apt/lists/* \
  && useradd --uid 1000 --create-home app
 WORKDIR /app
