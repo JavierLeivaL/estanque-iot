@@ -1,0 +1,14 @@
+node_modules/
+.next/
+.vercel/
+.env
+.env.local
+.env*.local
+device/.env
+device/data/*
+!device/data/.gitkeep
+__pycache__/
+*.pyc
+*.json.key
+*service-account*.json
+*-firebase-adminsdk-*.json
