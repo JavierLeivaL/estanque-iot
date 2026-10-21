@@ -1,0 +1,83 @@
+# Sistema IoT de monitoreo de estanques: 6 contenedores en la Raspberry Pi.
+# Arranque:  docker compose up -d --build   (luego inicia solo al encender la placa,
+# porque Docker está habilitado en systemd y todos usan restart: unless-stopped).
+name: estanque
+
+x-servicio: &servicio
+  restart: unless-stopped
+  networks: [interna]
+  environment:
+    MQTT_HOST: broker
+    TZ: America/Santiago
+  depends_on:
+    broker:
+      condition: service_healthy
+  healthcheck:
+    test: ["CMD", "python3", "-c", "import os,sys,time; sys.exit(0 if time.time()-os.path.getmtime('/tmp/healthy') < 90 else 1)"]
+    interval: 30s
+    timeout: 5s
+    retries: 3
+    start_period: 30s
+  logging:
+    driver: json-file
+    options: { max-size: "5m", max-file: "3" }
+  mem_limit: 128m
+
+services:
+  broker:
+    image: eclipse-mosquitto:2
+    restart: unless-stopped
+    networks: [interna]
+    volumes:
+      - ./mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+    healthcheck:
+      test: ["CMD-SHELL", "mosquitto_sub -h localhost -t '$$SYS/broker/uptime' -C 1 -W 5 > /dev/null || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    logging:
+      driver: json-file
+      options: { max-size: "5m", max-file: "3" }
+    mem_limit: 64m
+
+  nivel:
+    <<: *servicio
+    build: ./services/nivel
+    devices:
+      - /dev/gpiochip0:/dev/gpiochip0
+    environment:
+      MQTT_HOST: broker
+      TZ: America/Santiago
+      TRIG_GPIO: ${TRIG_GPIO:-23}
+      ECHO_GPIO: ${ECHO_GPIO:-24}
+
+  ambiente:
+    <<: *servicio
+    build: ./services/ambiente
+    # Lee el DHT22 por /sys/bus/iio (driver del kernel). /sys ya está montado
+    # en solo lectura dentro de cualquier contenedor no privilegiado.
+
+  procesamiento:
+    <<: *servicio
+    build: ./services/procesamiento
+
+  sincronizacion:
+    <<: *servicio
+    build: ./services/sincronizacion
+    env_file: .env
+    environment:
+      MQTT_HOST: broker
+      TZ: America/Santiago
+      DB_PATH: /data/buffer.db
+    volumes:
+      - ./data:/data
+
+  salud:
+    <<: *servicio
+    build: ./services/salud
+    ports:
+      - "127.0.0.1:8080:8080"   # solo accesible desde la propia Raspberry
+
+networks:
+  interna:
