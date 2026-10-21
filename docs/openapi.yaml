@@ -1,0 +1,121 @@
+openapi: 3.0.3
+info:
+  title: Estanques IoT API
+  version: 1.0.0
+  description: API REST de la plataforma de monitoreo de estanques (Next.js en Vercel + Firestore).
+servers:
+  - url: https://{app}.vercel.app/api/v1
+    variables: { app: { default: estanque-iot } }
+components:
+  securitySchemes:
+    usuario: { type: http, scheme: bearer, description: ID token de Firebase Authentication }
+    dispositivo: { type: http, scheme: bearer, description: "Token del dispositivo: <deviceId>.<secreto>" }
+    setup: { type: apiKey, in: header, name: x-setup-secret }
+  schemas:
+    Error: { type: object, properties: { error: { type: string }, detalles: { type: array, items: { type: string } } } }
+    Config:
+      type: object
+      properties:
+        muestreoSeg: { type: integer, minimum: 2, maximum: 3600 }
+        envioSeg: { type: integer, minimum: 10, maximum: 3600 }
+        alturaSensorCm: { type: number, minimum: 5, maximum: 400 }
+        distanciaLlenoCm: { type: number, minimum: 2.5, maximum: 300 }
+        umbralLlenadoPct: { type: number, minimum: 1, maximum: 100 }
+        umbralTempMaxC: { type: number }
+        umbralTempMinC: { type: number }
+        sensorNivelActivo: { type: boolean }
+        sensorAmbienteActivo: { type: boolean }
+    Punto:
+      type: object
+      required: [t]
+      properties:
+        t: { type: integer, description: "Inicio del minuto (epoch s, múltiplo de 60)" }
+        d: { type: number, description: distancia cm }
+        nv: { type: number, description: altura del contenido cm }
+        p: { type: number, description: llenado % }
+        tc: { type: number, description: temperatura °C }
+        hr: { type: number, description: humedad % }
+        hl: { type: number, nullable: true, description: horas hasta llenarse }
+        nd: { type: integer }
+        na: { type: integer }
+        e: { type: string, enum: [normal, lleno, temp_alta, temp_baja] }
+    Evento:
+      type: object
+      required: [t, tipo]
+      properties:
+        t: { type: integer }
+        tipo: { type: string, enum: [lleno, temp_alta, temp_baja, normalizado, sin_datos_nivel, sin_datos_ambiente] }
+        valor: { type: number, nullable: true }
+        umbral: { type: number, nullable: true }
+        mensaje: { type: string }
+paths:
+  /health:
+    get: { summary: Estado de la API, responses: { "200": { description: OK } } }
+  /setup:
+    post:
+      summary: Crea una organización y su administrador
+      security: [{ setup: [] }]
+      requestBody: { content: { application/json: { schema: { type: object, properties: { orgId: { type: string }, orgNombre: { type: string }, email: { type: string }, password: { type: string } } } } } }
+      responses: { "201": { description: Creado }, "401": { description: Clave incorrecta } }
+  /ingest:
+    post:
+      summary: Recibe un lote desde la Raspberry Pi y devuelve la configuración vigente
+      security: [{ dispositivo: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                configVersion: { type: integer }
+                pendientes: { type: integer }
+                puntos: { type: array, maxItems: 500, items: { $ref: "#/components/schemas/Punto" } }
+                eventos: { type: array, maxItems: 100, items: { $ref: "#/components/schemas/Evento" } }
+                salud: { type: object }
+      responses:
+        "200": { description: Lote guardado, content: { application/json: { schema: { type: object, properties: { ok: { type: boolean }, rechazados: { type: integer }, escrituras: { type: integer }, config: { $ref: "#/components/schemas/Config" } } } } } }
+        "401": { description: Token inválido o revocado, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "413": { description: Lote demasiado grande }
+  /devices:
+    get: { summary: Dispositivos de la organización, security: [{ usuario: [] }], responses: { "200": { description: OK } } }
+    post:
+      summary: (admin) Alta de dispositivo — devuelve el token una sola vez
+      security: [{ usuario: [] }]
+      requestBody: { content: { application/json: { schema: { type: object, properties: { nombre: { type: string }, ubicacion: { type: string }, tipo: { type: string, enum: [estanque, basurero] } } } } } }
+      responses: { "201": { description: "{ id, token }" }, "403": { description: Requiere admin } }
+  /devices/{id}:
+    parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+    get: { summary: Detalle del dispositivo, security: [{ usuario: [] }], responses: { "200": { description: OK }, "404": { description: No existe o es de otra organización } } }
+  /devices/{id}/config:
+    parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+    put:
+      summary: (admin) Actualiza la configuración remota
+      security: [{ usuario: [] }]
+      requestBody: { content: { application/json: { schema: { $ref: "#/components/schemas/Config" } } } }
+      responses: { "200": { description: "{ config, configVersion }" }, "400": { description: Configuración inválida } }
+  /devices/{id}/token:
+    parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+    post: { summary: (admin) Genera un token nuevo, security: [{ usuario: [] }], responses: { "201": { description: "{ token }" } } }
+    delete: { summary: (admin) Revoca el token, security: [{ usuario: [] }], responses: { "200": { description: OK } } }
+  /devices/{id}/readings:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+      - { name: desde, in: query, schema: { type: string, format: date-time } }
+      - { name: hasta, in: query, schema: { type: string, format: date-time } }
+    get: { summary: Histórico por rango (máx. 31 días), security: [{ usuario: [] }], responses: { "200": { description: "{ puntos, documentosLeidos, puntosTotales }" } } }
+  /alerts:
+    get:
+      summary: Últimas alertas de la organización
+      security: [{ usuario: [] }]
+      parameters: [{ name: deviceId, in: query, schema: { type: string } }, { name: limite, in: query, schema: { type: integer } }]
+      responses: { "200": { description: OK } }
+  /alerts/{id}/ack:
+    parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+    post: { summary: Reconoce una alerta, security: [{ usuario: [] }], responses: { "200": { description: OK } } }
+  /users:
+    get: { summary: (admin) Usuarios de la organización, security: [{ usuario: [] }], responses: { "200": { description: OK } } }
+    post:
+      summary: (admin) Crea un usuario
+      security: [{ usuario: [] }]
+      requestBody: { content: { application/json: { schema: { type: object, properties: { email: { type: string }, password: { type: string }, role: { type: string, enum: [admin, consulta] } } } } } }
+      responses: { "201": { description: Creado } }

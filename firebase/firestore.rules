@@ -1,0 +1,45 @@
+rules_version = '2';
+// Security Rules de Firestore — aislamiento por ORGANIZACIÓN y por ROL.
+//  * El orgId y el rol viajan como custom claims dentro del token de Firebase Auth
+//    (los asigna la API con el Admin SDK), así las reglas no gastan lecturas extra.
+//  * Los navegadores SOLO pueden leer datos de su propia organización.
+//  * NADIE escribe directo desde el cliente: todas las escrituras pasan por la API
+//    en Vercel (Admin SDK), que valida los datos y el rol. Por eso "allow write: if false".
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function autenticado() { return request.auth != null && request.auth.token.orgId is string; }
+    function miOrg() { return request.auth.token.orgId; }
+    function esAdmin() { return request.auth.token.role == 'admin'; }
+
+    match /orgs/{orgId} {
+      allow read: if autenticado() && miOrg() == orgId;
+      allow write: if false;
+
+      match /alertas/{alertaId} {
+        allow read: if autenticado() && miOrg() == orgId;
+        allow write: if false;
+      }
+    }
+
+    match /devices/{deviceId} {
+      // Para listar, la consulta del cliente debe incluir where("orgId", "==", miOrg).
+      allow read: if autenticado() && resource.data.orgId == miOrg();
+      allow write: if false;
+
+      match /horas/{horaId} {
+        allow read: if autenticado() && resource.data.orgId == miOrg();
+        allow write: if false;
+      }
+    }
+
+    match /users/{uid} {
+      allow read: if autenticado() && (request.auth.uid == uid || (esAdmin() && resource.data.orgId == miOrg()));
+      allow write: if false;
+    }
+
+    // Cualquier otra ruta queda cerrada.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
