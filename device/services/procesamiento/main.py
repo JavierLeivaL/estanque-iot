@@ -42,7 +42,7 @@ config = {
 }
 lock = threading.Lock()
 ventanas = {}  # minuto (epoch/60) -> {"d": [...], "t": [...], "h": [...]}
-historial_llenado = deque(maxlen=60)  # (epoch_minuto, pct)
+historial_llenado = deque(maxlen=720)  # (epoch_minuto, pct) últimas 12 h
 ultima_temp = {"valor": None, "ts": 0.0}
 estado_actual = {"estado": "normal"}
 ultimo_dato = {"nivel": time.time(), "ambiente": time.time()}
@@ -85,9 +85,9 @@ def procesar_ambiente(m):
 
 # ---------------------------------------------------------------- combinación
 def horas_para_llenar(pct_actual):
-    """Pendiente (%/min) por mínimos cuadrados con los últimos 30 minutos."""
-    puntos = [(t, p) for t, p in historial_llenado if t >= historial_llenado[-1][0] - 30]
-    if len(puntos) < 5:
+    """Pendiente (%/min) por mínimos cuadrados con las últimas 6 horas (un basurero se llena lento)."""
+    puntos = [(t, p) for t, p in historial_llenado if t >= historial_llenado[-1][0] - 360]
+    if len(puntos) < 30:
         return None
     xs = [t for t, _ in puntos]
     ys = [p for _, p in puntos]
@@ -96,7 +96,7 @@ def horas_para_llenar(pct_actual):
     if den == 0:
         return None
     pendiente = sum((x - mx) * (y - my) for x, y in zip(xs, ys)) / den
-    if pendiente <= 0.01:  # vaciándose o estable
+    if pendiente <= 0.002:  # menos de ~3 %/día: estable o vaciándose
         return None
     return round((100 - pct_actual) / pendiente / 60, 1)
 
@@ -134,6 +134,8 @@ def cerrar_minuto(cliente, minuto, w):
         pct = (alto - d) / max(alto - lleno, 1e-6) * 100
         pct = round(min(100.0, max(0.0, pct)), 1)
         punto.update(d=round(d, 1), nv=round(max(0.0, alto - d), 1), p=pct)
+        if historial_llenado and pct < historial_llenado[-1][1] - 20:
+            historial_llenado.clear()  # se vació el basurero: la tendencia anterior ya no sirve
         historial_llenado.append((minuto, pct))
         punto["hl"] = horas_para_llenar(pct)
     estado = evaluar_estado(pct, temp)
