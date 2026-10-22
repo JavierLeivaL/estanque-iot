@@ -193,6 +193,7 @@ function Detalle({ id }) {
         <div className="metricas grande">
           <div><small>Llenado</small><b>{fmt(l.p, 1, " %")}</b></div>
           <div><small>Altura del contenido</small><b>{fmt(l.nv, 1, " cm")}</b></div>
+          <div><small>Distancia medida</small><b>{fmt(l.d, 1, " cm")}</b></div>
           <div><small>Temperatura</small><b>{fmt(l.tc, 1, " °C")}</b></div>
           <div><small>Humedad</small><b>{fmt(l.hr, 0, " %")}</b></div>
           <div><small>Se llenará en</small><b>{typeof l.hl === "number" ? `${l.hl} h` : "—"}</b></div>
