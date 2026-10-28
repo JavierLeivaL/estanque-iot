@@ -86,6 +86,11 @@ paths:
   /devices/{id}:
     parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
     get: { summary: Detalle del dispositivo, security: [{ usuario: [] }], responses: { "200": { description: OK }, "404": { description: No existe o es de otra organización } } }
+    patch:
+      summary: (admin) Cambia nombre, ubicación o tipo
+      security: [{ usuario: [] }]
+      requestBody: { content: { application/json: { schema: { type: object, properties: { nombre: { type: string }, ubicacion: { type: string }, tipo: { type: string, enum: [estanque, basurero] } } } } } }
+      responses: { "200": { description: OK }, "400": { description: Datos inválidos } }
   /devices/{id}/config:
     parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
     put:
