@@ -39,6 +39,24 @@ export async function crear(usuario, { nombre, ubicacion, tipo }) {
   return { id, token };
 }
 
+/** Cambia los datos descriptivos del dispositivo (nombre, ubicación, tipo). */
+export async function actualizarDatos(usuario, id, { nombre, ubicacion, tipo }) {
+  await obtenerDeOrg(usuario, id);
+  const cambios = {};
+  if (nombre !== undefined) {
+    if (typeof nombre !== "string" || !nombre.trim() || nombre.length > 60) throw new ErrorApi(400, "nombre inválido (1-60 caracteres)");
+    cambios.nombre = nombre.trim();
+  }
+  if (ubicacion !== undefined) cambios.ubicacion = String(ubicacion).slice(0, 100);
+  if (tipo !== undefined) {
+    if (!["estanque", "basurero"].includes(tipo)) throw new ErrorApi(400, "tipo debe ser 'estanque' o 'basurero'");
+    cambios.tipo = tipo;
+  }
+  if (!Object.keys(cambios).length) throw new ErrorApi(400, "No hay cambios");
+  await repo.actualizar(id, cambios);
+  return { id, ...cambios };
+}
+
 export async function regenerarToken(usuario, id) {
   await obtenerDeOrg(usuario, id);
   const { token, hash } = generarToken(id);
