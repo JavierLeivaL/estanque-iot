@@ -164,6 +164,32 @@ function AlertasDispositivo({ orgId, id }) {
   );
 }
 
+function DatosDispositivo({ d }) {
+  const [abierto, setAbierto] = useState(false);
+  const [form, setForm] = useState({ nombre: d.nombre, ubicacion: d.ubicacion || "", tipo: d.tipo || "estanque" });
+  const [error, setError] = useState("");
+  async function guardar(e) {
+    e.preventDefault();
+    setError("");
+    try {
+      await api(`/devices/${d.id}`, { metodo: "PATCH", cuerpo: form });
+      setAbierto(false);
+    } catch (err) { setError(err.message); }
+  }
+  if (!abierto) return <button className="sec chico" onClick={() => { setForm({ nombre: d.nombre, ubicacion: d.ubicacion || "", tipo: d.tipo || "estanque" }); setAbierto(true); }}>Editar datos</button>;
+  return (
+    <form className="tarjeta form-linea" onSubmit={guardar}>
+      <input placeholder="Nombre" value={form.nombre} onChange={(e) => setForm({ ...form, nombre: e.target.value })} required maxLength={60} />
+      <input placeholder="Ubicación" value={form.ubicacion} onChange={(e) => setForm({ ...form, ubicacion: e.target.value })} maxLength={100} />
+      <select value={form.tipo} onChange={(e) => setForm({ ...form, tipo: e.target.value })}>
+        <option value="estanque">Estanque de agua</option><option value="basurero">Contenedor de basura</option>
+      </select>
+      <button>Guardar</button><button type="button" className="sec" onClick={() => setAbierto(false)}>Cancelar</button>
+      {error && <p className="error">{error}</p>}
+    </form>
+  );
+}
+
 function Detalle({ id }) {
   const { usuario } = useAuth();
   const [d, setD] = useState(null);
@@ -189,6 +215,7 @@ function Detalle({ id }) {
         <h2>{d.nombre} <small className="tenue">{d.ubicacion}</small></h2>
         <span className={`pastilla ${online ? "ok" : "off"}`}>{online ? "En línea" : "Sin conexión"} · {haceCuanto(d.ultimoContacto?.toMillis?.())}</span>
       </div>
+      {esAdmin && <DatosDispositivo d={d} />}
       <section className="tarjeta">
         <div className="metricas grande">
           <div><small>Llenado</small><b>{fmt(l.p, 1, " %")}</b></div>
