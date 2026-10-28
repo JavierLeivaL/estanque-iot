@@ -115,6 +115,7 @@ Base: `https://<tu-app>.vercel.app/api/v1` · Especificación completa: [`docs/o
 | GET | `/devices` | Usuario | Dispositivos de la organización |
 | POST | `/devices` | Admin | Alta de dispositivo; devuelve el token una sola vez |
 | GET | `/devices/{id}` | Usuario | Detalle (estado, configuración, salud) |
+| PATCH | `/devices/{id}` | Admin | Cambia nombre, ubicación o tipo |
 | PUT | `/devices/{id}/config` | Admin | Cambia la configuración remota |
 | POST | `/devices/{id}/token` | Admin | Genera un token nuevo (invalida el anterior) |
 | DELETE | `/devices/{id}/token` | Admin | Revoca el token |
