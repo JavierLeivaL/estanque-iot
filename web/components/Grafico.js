@@ -18,13 +18,17 @@ export default function Grafico({ puntos, series, alto = 220 }) {
   };
   const rIzq = rango(ejes.izq), rDer = rango(ejes.der);
   const y = (v, [lo, hi]) => m.s + (1 - (v - lo) / (hi - lo)) * (alto - m.s - m.b);
+  // paso típico entre puntos (1 min en 24 h; mayor cuando el servidor agrupa rangos largos)
+  const pasos = validos.slice(1).map((p, i) => p.t - validos.at(i).t).sort((a, b) => a - b);
+  const paso = pasos.length ? pasos.at(Math.floor(pasos.length / 2)) : 60;
+  const hueco = Math.max(5 * 60, paso * 3);
   const camino = (s) => {
     const r = s.eje === "der" ? rDer : rIzq;
     let d = "", previo = null;
     for (const p of validos) {
       const v = p[s.clave];
       if (typeof v !== "number") { previo = null; continue; }
-      const corte = previo && p.t - previo > 5 * 60; // hueco de datos > 5 min: cortar la línea
+      const corte = previo && p.t - previo > hueco; // hueco real de datos (corte de luz o red): cortar la línea
       d += `${!previo || corte ? "M" : "L"}${x(p.t).toFixed(1)},${y(v, r).toFixed(1)}`;
       previo = p.t;
     }
